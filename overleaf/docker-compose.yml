@@ -1,0 +1,72 @@
+services:
+
+  mongo:
+    image: mongo:8
+    container_name: overleaf-mongo
+    restart: always
+
+    command: ["mongod","--bind_ip_all","--replSet","overleaf"]
+
+    volumes:
+      - /opt/overleaf/mongo_data:/data/db
+
+
+  mongo-init-replica:
+    image: mongo:8
+    depends_on:
+      - mongo
+
+    restart: "no"
+
+    entrypoint: >
+      bash -c "
+      sleep 5 &&
+      mongosh --host mongo:27017 --eval '
+      rs.initiate({
+        _id:\"overleaf\",
+        members:[{_id:0,host:\"mongo:27017\"}]
+      })'
+      "
+
+
+  redis:
+    image: redis:6.2
+    container_name: overleaf-redis
+    restart: always
+
+    volumes:
+      - /opt/overleaf/redis_data:/data
+
+
+  sharelatex:
+    image: sharelatex/sharelatex:latest
+    container_name: overleaf
+    restart: always
+
+    depends_on:
+      - mongo
+      - redis
+
+    ports:
+      - "80:80"
+
+    volumes:
+      - /opt/overleaf/sharelatex_data:/var/lib/overleaf
+
+    environment:
+
+      OVERLEAF_APP_NAME: "Overleaf CE"
+      OVERLEAF_SITE_URL: "http://localhost"
+      OVERLEAF_ADMIN_EMAIL: "admin@example.com"
+
+      OVERLEAF_MONGO_URL: "mongodb://mongo:27017/sharelatex?replicaSet=overleaf"
+
+      OVERLEAF_REDIS_HOST: "redis"
+      REDIS_HOST: "redis"
+
+      ENABLE_CONVERSIONS: "true"
+      EMAIL_CONFIRMATION_DISABLED: "true"
+
+      ENABLED_LINKED_FILE_TYPES: "project_file,project_output_file"
+
+      TEXMFVAR: "/var/lib/overleaf/tmp/texmf-var"
