@@ -37,9 +37,9 @@ services:
     volumes:
       - /opt/overleaf/redis_data:/data
 
-
   sharelatex:
-    image: sharelatex/sharelatex:latest
+    build: .
+    image: overleaf-full
     container_name: overleaf
     restart: always
 
@@ -70,3 +70,4 @@ services:
       ENABLED_LINKED_FILE_TYPES: "project_file,project_output_file"
 
       TEXMFVAR: "/var/lib/overleaf/tmp/texmf-var"
+      
