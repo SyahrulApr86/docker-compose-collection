@@ -29,7 +29,6 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
-
     restart: "no"
 
     entrypoint: >
@@ -51,10 +50,10 @@ services:
     container_name: overleaf-redis
     restart: always
 
+    command: ["redis-server","--appendonly","yes"]
+
     volumes:
       - /opt/overleaf/redis_data:/data
-
-    command: ["redis-server","--appendonly","yes"]
 
 
   ################################
@@ -68,10 +67,9 @@ services:
     restart: always
 
     depends_on:
-      mongo:
-        condition: service_healthy
-      redis:
-        condition: service_started
+      - mongo
+      - redis
+      - mongo-init-replica
 
     ports:
       - "80:80"
@@ -81,46 +79,63 @@ services:
 
     environment:
 
+      ################################
+      # APP
+      ################################
+
       OVERLEAF_APP_NAME: "Overleaf CE"
-      OVERLEAF_SITE_URL: "${OVERLEAF_SITE_URL}"
-      OVERLEAF_ADMIN_EMAIL: "${OVERLEAF_ADMIN_EMAIL}"
+      OVERLEAF_SITE_URL: "http://localhost"
+      OVERLEAF_NAV_TITLE: "Overleaf"
 
-      OVERLEAF_MONGO_URL: "mongodb://mongo:27017/sharelatex?replicaSet=overleaf"
+      ################################
+      # DATABASE
+      ################################
 
-      OVERLEAF_REDIS_HOST: "redis"
-      REDIS_HOST: "redis"
+      OVERLEAF_MONGO_URL: mongodb://mongo:27017/sharelatex?replicaSet=overleaf
+
+      ################################
+      # REDIS
+      ################################
+
+      OVERLEAF_REDIS_HOST: redis
+      REDIS_HOST: redis
+
+      ################################
+      # FEATURES
+      ################################
 
       ENABLE_CONVERSIONS: "true"
       EMAIL_CONFIRMATION_DISABLED: "true"
 
-      ENABLED_LINKED_FILE_TYPES: "project_file,project_output_file"
+      ################################
+      # FILE TYPES
+      ################################
 
-      TEXMFVAR: "/var/lib/overleaf/tmp/texmf-var"
+      ENABLED_LINKED_FILE_TYPES: project_file,project_output_file
+
+      ################################
+      # TEX CACHE
+      ################################
+
+      TEXMFVAR: /var/lib/overleaf/tmp/texmf-var
 
 
   ################################
-  # Create admin automatically
+  # Admin auto creation
   ################################
 
-  overleaf-init-admin:
-    image: overleaf-full
-
+  admin-init:
+    image: docker:cli
     depends_on:
       - sharelatex
-      - mongo-init-replica
-
     restart: "no"
 
     environment:
-      ADMIN_EMAIL: ${OVERLEAF_ADMIN_EMAIL}
-      ADMIN_PASSWORD: ${OVERLEAF_ADMIN_PASSWORD}
+      OVERLEAF_ADMIN_EMAIL: ${OVERLEAF_ADMIN_EMAIL}
+      OVERLEAF_ADMIN_PASSWORD: ${OVERLEAF_ADMIN_PASSWORD}
 
-    entrypoint: >
-      bash -c "
-      echo 'Waiting Overleaf startup...' &&
-      sleep 20 &&
-      node /overleaf/services/web/modules/server-ce-scripts/scripts/create-user.mjs \
-        --admin \
-        --email=$ADMIN_EMAIL \
-        --password=$ADMIN_PASSWORD || true
-      "
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./init-admin.sh:/init-admin.sh
+
+    entrypoint: ["sh","/init-admin.sh"]
