@@ -1,0 +1,42 @@
+services:
+  observium-db:
+    image: mariadb:11.7
+    container_name: observium-db
+    environment:
+      - MYSQL_ROOT_PASSWORD=alung8692
+      - MYSQL_USER=observium
+      - MYSQL_PASSWORD=alung8692
+      - MYSQL_DATABASE=observium
+      - TZ=Asia/Jakarta
+    volumes:
+      - ./data:/var/lib/mysql
+    networks:
+      - observium-net
+    restart: unless-stopped
+
+  observium:
+    image: mbixtech/observium:latest
+    container_name: observium
+    environment:
+      - OBSERVIUM_ADMIN_USER=admin
+      - OBSERVIUM_ADMIN_PASS=alung8692
+      - OBSERVIUM_DB_HOST=observium-db
+      - OBSERVIUM_DB_NAME=observium
+      - OBSERVIUM_DB_USER=observium
+      - OBSERVIUM_DB_PASS=alung8692
+      - OBSERVIUM_BASE_URL=http://192.168.1.101:8086
+      - TZ=Asia/Jakarta
+    volumes:
+      - ./logs:/opt/observium/logs
+      - ./rrd:/opt/observium/rrd
+    networks:
+      - observium-net
+    ports:
+      - 8086:80
+    restart: unless-stopped
+    depends_on:
+      - observium-db
+
+networks:
+  observium-net:
+    driver: bridge

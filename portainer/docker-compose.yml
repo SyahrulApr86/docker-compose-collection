@@ -1,0 +1,16 @@
+services:
+  portainer:
+    image: portainer/portainer-ce:lts
+    container_name: portainer
+    restart: unless-stopped
+    command: --admin-password-file /run/secrets/portainer-admin-password
+    ports:
+      - "8000:8000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+      - ./admin-password.txt:/run/secrets/portainer-admin-password:ro
+
+volumes:
+  portainer_data:

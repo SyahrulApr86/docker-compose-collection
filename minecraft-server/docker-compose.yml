@@ -1,0 +1,58 @@
+services:
+  minecraft:
+    image: itzg/minecraft-server:${IMAGE_TAG:-java17}
+    tty: true
+    stdin_open: true
+    restart: unless-stopped
+    stop_grace_period: 1m
+    ports:
+      - "${MC_PORT:-25565}:25565"
+    environment:
+      EULA: "${EULA:-TRUE}"
+      TYPE: "${TYPE:-FORGE}"
+      VERSION: "${VERSION:-1.20.1}"
+      MEMORY: "${MEMORY:-6G}"
+      MOTD: "${MOTD:-Minecraft 1.20.1 Modded Server}"
+      DIFFICULTY: "${DIFFICULTY:-normal}"
+      MAX_PLAYERS: "${MAX_PLAYERS:-10}"
+      VIEW_DISTANCE: "${VIEW_DISTANCE:-10}"
+      SIMULATION_DISTANCE: "${SIMULATION_DISTANCE:-10}"
+      ONLINE_MODE: "${ONLINE_MODE:-TRUE}"
+      ENABLE_WHITELIST: "${ENABLE_WHITELIST:-FALSE}"
+      ALLOW_FLIGHT: "${ALLOW_FLIGHT:-TRUE}"
+      REMOVE_OLD_MODS: "${REMOVE_OLD_MODS:-FALSE}"
+      ENABLE_RCON: "${ENABLE_RCON:-FALSE}"
+      RCON_PASSWORD: "${RCON_PASSWORD:-change-me}"
+      FORGE_VERSION: "${FORGE_VERSION:-}"
+      MODPACK: "${MODPACK:-}"
+      GENERIC_PACK: "${GENERIC_PACK:-}"
+      GENERIC_PACKS: "${GENERIC_PACKS:-}"
+      PACKWIZ_URL: "${PACKWIZ_URL:-}"
+      MODS: "${MODS:-}"
+      MODS_FILE: "${MODS_FILE:-}"
+      MODRINTH_MODPACK: "${MODRINTH_MODPACK:-}"
+      MODRINTH_LOADER: "${MODRINTH_LOADER:-}"
+      MODRINTH_VERSION: "${MODRINTH_VERSION:-}"
+      MODRINTH_MODPACK_VERSION_TYPE: "${MODRINTH_MODPACK_VERSION_TYPE:-}"
+      MODRINTH_FORCE_SYNCHRONIZE: "${MODRINTH_FORCE_SYNCHRONIZE:-FALSE}"
+      MODRINTH_EXCLUDE_FILES: "${MODRINTH_EXCLUDE_FILES:-}"
+      MODRINTH_FORCE_INCLUDE_FILES: "${MODRINTH_FORCE_INCLUDE_FILES:-}"
+      MODRINTH_IGNORE_MISSING_FILES: "${MODRINTH_IGNORE_MISSING_FILES:-}"
+      MODRINTH_OVERRIDES_EXCLUSIONS: "${MODRINTH_OVERRIDES_EXCLUSIONS:-}"
+      CF_API_KEY: "${CF_API_KEY:-}"
+      CF_PAGE_URL: "${CF_PAGE_URL:-}"
+      CF_SLUG: "${CF_SLUG:-}"
+      CF_FILE_ID: "${CF_FILE_ID:-}"
+      CF_FILENAME_MATCHER: "${CF_FILENAME_MATCHER:-}"
+      CF_MODPACK_ZIP: "${CF_MODPACK_ZIP:-}"
+      CF_MODPACK_MANIFEST: "${CF_MODPACK_MANIFEST:-}"
+      CF_EXCLUDE_MODS: "${CF_EXCLUDE_MODS:-}"
+      CF_FORCE_INCLUDE_MODS: "${CF_FORCE_INCLUDE_MODS:-}"
+      CF_OVERRIDES_EXCLUSIONS: "${CF_OVERRIDES_EXCLUSIONS:-}"
+      CF_FORCE_SYNCHRONIZE: "${CF_FORCE_SYNCHRONIZE:-FALSE}"
+    volumes:
+      - ./data:/data
+      - ./mods:/mods:ro
+      - ./config:/config:ro
+      - ./modpacks:/modpacks:ro
+      - ./downloads:/downloads
