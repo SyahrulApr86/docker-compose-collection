@@ -1,0 +1,31 @@
+services:
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    restart: unless-stopped
+    environment:
+      - DOMAIN=https://192.168.1.103:8088
+      - SIGNUPS_ALLOWED=true
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+    volumes:
+      - ./data:/data
+    networks:
+      - vw-net
+
+  caddy:
+    image: caddy:alpine
+    container_name: vaultwarden-caddy
+    restart: unless-stopped
+    ports:
+      - 8088:443
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy-data:/data
+      - ./caddy-config:/config
+    networks:
+      - vw-net
+    depends_on:
+      - vaultwarden
+
+networks:
+  vw-net:
