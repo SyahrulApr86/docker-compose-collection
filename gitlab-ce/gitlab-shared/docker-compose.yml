@@ -1,6 +1,9 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    # GitLab (current releases) requires PostgreSQL >= 17. Using 16 boots and
+    # even backs up fine, but gitlab-backup prints a loud version-mismatch
+    # warning on every run and GitLab won't support it going forward.
+    image: postgres:17-alpine
     container_name: gitlab_postgres
     env_file:
       - .env
