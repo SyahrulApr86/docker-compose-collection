@@ -2,7 +2,12 @@ services:
   gitlab:
     image: gitlab/gitlab-ce:${GITLAB_VERSION:-latest}
     container_name: gitlab_app
-    hostname: ${GITLAB_HOSTNAME:-gitlab.local}
+    # NOT set to the public domain (GITLAB_HOSTNAME/GITLAB_EXTERNAL_URL): if the
+    # container's OS hostname matches the public FQDN, Docker's embedded DNS
+    # resolves that FQDN straight to this container on any shared network
+    # (e.g. gitlab-shared), bypassing the reverse proxy entirely and hitting a
+    # port nginx isn't listening on here (443). Keep it neutral.
+    hostname: gitlab-app
     env_file:
       - .env
     environment:
