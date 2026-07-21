@@ -1,6 +1,6 @@
 # docker-compose-collection
 
-Docker Compose configs for the **magnolia** homelab cluster (Proxmox VE, 5 nodes).
+Docker Compose configs.
 All configs are copied from running services — not templates, not guesswork.
 
 ## Services
