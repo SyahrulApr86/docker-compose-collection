@@ -1,0 +1,12 @@
+log:
+  level: info
+
+runner:
+  file: /data/.runner
+
+cache:
+  enabled: true
+  host: runner
+
+container:
+  network: gitea-app_default

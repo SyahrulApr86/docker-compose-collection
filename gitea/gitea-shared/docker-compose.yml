@@ -1,0 +1,197 @@
+x-pgbackrest-image: &pgbackrest-image
+  build:
+    context: .
+    dockerfile: Dockerfile.postgres-pgbackrest
+  image: gitea-postgres-pgbackrest:15-alpine
+
+services:
+  db:
+    <<: *pgbackrest-image
+    container_name: gitea_db
+    env_file:
+      - .env
+    depends_on:
+      minio:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - postgres_socket:/var/run/postgresql
+      - pgbackrest_state:/var/lib/pgbackrest
+    environment:
+      - STANZA=${PG_BACKUP_STANZA:-db}
+      - PGDATA_PATH=/var/lib/postgresql/data
+      - PGSOCKET_PATH=/var/run/postgresql
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+      - PG_BACKUP_S3_ENDPOINT=minio
+      - PG_BACKUP_S3_PORT=9000
+      - PG_BACKUP_VERIFY_TLS=${PG_BACKUP_VERIFY_TLS:-n}
+      - POSTGRES_PORT_INTERNAL=5432
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=/opt/gitea-backup-scripts/pgbackrest-archive-push.sh %p
+      - -c
+      - max_wal_senders=3
+      - -c
+      - wal_keep_size=1GB
+
+  backup-check:
+    <<: *pgbackrest-image
+    container_name: gitea_backup_check
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
+    volumes:
+      - postgres_data:/var/lib/postgresql/data:ro
+      - postgres_socket:/var/run/postgresql
+      - pgbackrest_state:/var/lib/pgbackrest
+      - ./backup-scripts:/backup-scripts:ro
+    environment:
+      - STANZA=${PG_BACKUP_STANZA:-db}
+      - PGDATA_PATH=/var/lib/postgresql/data
+      - PGSOCKET_PATH=/var/run/postgresql
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+      - PG_BACKUP_S3_ENDPOINT=minio
+      - PG_BACKUP_S3_PORT=9000
+      - PG_BACKUP_VERIFY_TLS=${PG_BACKUP_VERIFY_TLS:-n}
+      - POSTGRES_PORT_INTERNAL=5432
+    restart: "no"
+    entrypoint: ["/bin/sh", "/backup-scripts/backup-check.sh"]
+
+  backup-full:
+    <<: *pgbackrest-image
+    container_name: gitea_backup_full
+    env_file:
+      - .env
+    depends_on:
+      backup-check:
+        condition: service_completed_successfully
+    volumes:
+      - postgres_data:/var/lib/postgresql/data:ro
+      - postgres_socket:/var/run/postgresql
+      - pgbackrest_state:/var/lib/pgbackrest
+      - ./backup-scripts:/backup-scripts:ro
+    environment:
+      - STANZA=${PG_BACKUP_STANZA:-db}
+      - PGDATA_PATH=/var/lib/postgresql/data
+      - PGSOCKET_PATH=/var/run/postgresql
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+      - PG_BACKUP_S3_ENDPOINT=minio
+      - PG_BACKUP_S3_PORT=9000
+      - PG_BACKUP_VERIFY_TLS=${PG_BACKUP_VERIFY_TLS:-n}
+      - POSTGRES_PORT_INTERNAL=5432
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/backup-scripts/backup-runner.sh"]
+    command: ["full-loop"]
+
+  backup-diff:
+    <<: *pgbackrest-image
+    container_name: gitea_backup_diff
+    env_file:
+      - .env
+    depends_on:
+      backup-check:
+        condition: service_completed_successfully
+    volumes:
+      - postgres_data:/var/lib/postgresql/data:ro
+      - postgres_socket:/var/run/postgresql
+      - pgbackrest_state:/var/lib/pgbackrest
+      - ./backup-scripts:/backup-scripts:ro
+    environment:
+      - STANZA=${PG_BACKUP_STANZA:-db}
+      - PGDATA_PATH=/var/lib/postgresql/data
+      - PGSOCKET_PATH=/var/run/postgresql
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+      - PG_BACKUP_S3_ENDPOINT=minio
+      - PG_BACKUP_S3_PORT=9000
+      - PG_BACKUP_VERIFY_TLS=${PG_BACKUP_VERIFY_TLS:-n}
+      - POSTGRES_PORT_INTERNAL=5432
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/backup-scripts/backup-runner.sh"]
+    command: ["diff-loop"]
+
+  redis:
+    image: redis:7-alpine
+    container_name: gitea_redis
+    env_file:
+      - .env
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    restart: always
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} --raw ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: gitea_minio
+    env_file:
+      - .env
+    ports:
+      - "${MINIO_API_PORT:-9002}:9000"
+      - "${MINIO_CONSOLE_PORT:-9003}:9001"
+    volumes:
+      - minio_data:/data
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
+    command: server /data --console-address ":9001"
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  createbuckets:
+    image: minio/mc:latest
+    container_name: gitea_minio_init
+    env_file:
+      - .env
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/create-minio-buckets.sh"]
+    environment:
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - PG_BACKUP_S3_BUCKET=${PG_BACKUP_S3_BUCKET}
+    volumes:
+      - ./create-minio-buckets.sh:/create-minio-buckets.sh:ro
+    restart: "no"
+
+volumes:
+  postgres_data:
+  postgres_socket:
+  redis_data:
+  minio_data:
+  pgbackrest_state:

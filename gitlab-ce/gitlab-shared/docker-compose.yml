@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gitlab_postgres
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-gitlabhq_production}
+      - POSTGRES_USER=${POSTGRES_USER:-gitlab}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - gitlab_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gitlab} -d ${POSTGRES_DB:-gitlabhq_production}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gitlab-shared
+
+  redis:
+    image: redis:7-alpine
+    container_name: gitlab_redis
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - gitlab_redis_data:/data
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gitlab-shared
+
+  minio:
+    image: minio/minio:latest
+    container_name: gitlab_minio
+    env_file:
+      - .env
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
+    command: server /data --console-address ":9001"
+    volumes:
+      - gitlab_minio_data:/data
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    restart: always
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gitlab-shared
+
+  createbuckets:
+    image: minio/mc:latest
+    container_name: gitlab_minio_createbuckets
+    depends_on:
+      minio:
+        condition: service_healthy
+    env_file:
+      - .env
+    entrypoint: ["/bin/sh", "/scripts/create-minio-buckets.sh"]
+    volumes:
+      - ./create-minio-buckets.sh:/scripts/create-minio-buckets.sh:ro
+    restart: "no"
+    networks:
+      - gitlab-shared
+
+volumes:
+  gitlab_postgres_data:
+  gitlab_redis_data:
+  gitlab_minio_data:
+
+networks:
+  gitlab-shared:
+    name: gitlab-shared

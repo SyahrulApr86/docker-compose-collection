@@ -1,0 +1,14 @@
+services:
+  gitea:
+    networks:
+      - default
+      - shared
+      - proxy
+
+networks:
+  shared:
+    external: true
+    name: ${GITEA_SHARED_NETWORK:-gitea-shared_default}
+  proxy:
+    external: true
+    name: ${GITEA_PROXY_NETWORK:-proxy}

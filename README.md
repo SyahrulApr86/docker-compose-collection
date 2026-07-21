@@ -11,6 +11,9 @@ All configs are copied from running services — not templates, not guesswork.
 | [`bentopdf/`](bentopdf/) | BentoPDF — PDF tools | `3000` | lena |
 | [`dozzle/`](dozzle/) | Dozzle — Docker log viewer | `9999` | lena / mikasa / monitoring |
 | [`flame/`](flame/) | Flame — startpage / bookmark dashboard | `5005` | lena |
+| [`gitea/`](gitea/) | Gitea EE — git hosting + Actions CI (app + shared: DB/Redis/MinIO/pgBackRest + 5 runners) | `3002` / `222` | mlcv-ws1 |
+| [`gitlab-ce/`](gitlab-ce/) | GitLab CE — git hosting + CI (app + shared: DB/Redis/MinIO + runner + backup) | `18300` / `2224` | mlcv-ws1 |
+| [`harbor/`](harbor/) | Harbor CE — container image registry (installer-based, not static compose) | `8080` | mlcv-ws1 |
 | [`homarr/`](homarr/) | Homarr — home server dashboard | `7575` | lena / hinata |
 | [`homelab-dashboard/`](homelab-dashboard/) | Custom static homelab dashboard (nginx) | `80` | hinata |
 | [`homepage/`](homepage/) | Homepage — homelab dashboard | `3003` | lena |
@@ -51,3 +54,6 @@ Services without `.env.example` have all config inline in `docker-compose.yml`.
 - **`taiga/`** — includes nginx gateway config at `taiga-gateway/taiga.conf`.
 - **`immich/`** — uses `openvino` image variant for Intel iGPU hardware acceleration.
 - **`keycloak/`** — runs `start-dev` mode (no TLS). Suitable for LAN-only deployment.
+- **`gitea/`** — split stack: `gitea-app/` (Gitea + N runners, scale with `docker-compose.extra-runners.yml`) talks to `gitea-shared/` (Postgres w/ pgBackRest, Redis, MinIO) over an external network. See both directories' READMEs.
+- **`gitlab-ce/`** — same split-stack idea as `gitea/`: `gitlab-app/` (omnibus GitLab + 1 runner + backup sidecar) talks to `gitlab-shared/` (Postgres, Redis, MinIO) over the external `gitlab-shared` network. Deployed to coexist with Gitea, not replace it. See `gitlab-app/README.md` for the runner-token and backup setup steps.
+- **`harbor/`** — ships the installer (`install.sh` + `harbor.yml`) instead of a static compose file, since Harbor generates its own `docker-compose.yml` from `harbor.yml` at install time.

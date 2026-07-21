@@ -1,0 +1,90 @@
+services:
+  runner-2:
+    image: gitea/act_runner:0.3.0
+    container_name: gitea-app-runner-2
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - GITEA_INSTANCE_URL=${GITEA_RUNNER_INSTANCE_URL:-http://gitea:3000/}
+      - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_REGISTRATION_TOKEN}
+      - GITEA_RUNNER_NAME=gitea-runner-2
+      - GITEA_RUNNER_LABELS=${GITEA_RUNNER_LABELS}
+      - CONFIG_FILE=/config.yaml
+    working_dir: /data
+    volumes:
+      - runner2_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./act_runner.yaml:/config.yaml:ro
+    networks:
+      - gitea-app_default
+
+  runner-3:
+    image: gitea/act_runner:0.3.0
+    container_name: gitea-app-runner-3
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - GITEA_INSTANCE_URL=${GITEA_RUNNER_INSTANCE_URL:-http://gitea:3000/}
+      - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_REGISTRATION_TOKEN}
+      - GITEA_RUNNER_NAME=gitea-runner-3
+      - GITEA_RUNNER_LABELS=${GITEA_RUNNER_LABELS}
+      - CONFIG_FILE=/config.yaml
+    working_dir: /data
+    volumes:
+      - runner3_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./act_runner.yaml:/config.yaml:ro
+    networks:
+      - gitea-app_default
+
+  runner-4:
+    image: gitea/act_runner:0.3.0
+    container_name: gitea-app-runner-4
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - GITEA_INSTANCE_URL=${GITEA_RUNNER_INSTANCE_URL:-http://gitea:3000/}
+      - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_REGISTRATION_TOKEN}
+      - GITEA_RUNNER_NAME=gitea-runner-4
+      - GITEA_RUNNER_LABELS=${GITEA_RUNNER_LABELS}
+      - CONFIG_FILE=/config.yaml
+    working_dir: /data
+    volumes:
+      - runner4_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./act_runner.yaml:/config.yaml:ro
+    networks:
+      - gitea-app_default
+
+  runner-5:
+    image: gitea/act_runner:0.3.0
+    container_name: gitea-app-runner-5
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - GITEA_INSTANCE_URL=${GITEA_RUNNER_INSTANCE_URL:-http://gitea:3000/}
+      - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_REGISTRATION_TOKEN}
+      - GITEA_RUNNER_NAME=gitea-runner-5
+      - GITEA_RUNNER_LABELS=${GITEA_RUNNER_LABELS}
+      - CONFIG_FILE=/config.yaml
+    working_dir: /data
+    volumes:
+      - runner5_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./act_runner.yaml:/config.yaml:ro
+    networks:
+      - gitea-app_default
+
+volumes:
+  runner2_data:
+  runner3_data:
+  runner4_data:
+  runner5_data:
+
+networks:
+  gitea-app_default:
+    external: true

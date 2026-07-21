@@ -1,0 +1,156 @@
+services:
+  gitlab:
+    image: gitlab/gitlab-ce:${GITLAB_VERSION:-latest}
+    container_name: gitlab_app
+    hostname: ${GITLAB_HOSTNAME:-gitlab.local}
+    env_file:
+      - .env
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url '${GITLAB_EXTERNAL_URL}'
+        gitlab_rails['gitlab_shell_ssh_port'] = ${GITLAB_SSH_PORT:-2224}
+
+        # ---- External PostgreSQL (gitlab-shared stack) ----
+        postgresql['enable'] = false
+        gitlab_rails['db_adapter'] = 'postgresql'
+        gitlab_rails['db_host'] = '${GITLAB_DB_HOST:-gitlab_postgres}'
+        gitlab_rails['db_port'] = 5432
+        gitlab_rails['db_database'] = '${POSTGRES_DB:-gitlabhq_production}'
+        gitlab_rails['db_username'] = '${POSTGRES_USER:-gitlab}'
+        gitlab_rails['db_password'] = '${POSTGRES_PASSWORD}'
+
+        # ---- External Redis (gitlab-shared stack) ----
+        redis['enable'] = false
+        gitlab_rails['redis_host'] = '${GITLAB_REDIS_HOST:-gitlab_redis}'
+        gitlab_rails['redis_port'] = 6379
+        gitlab_rails['redis_password'] = '${REDIS_PASSWORD}'
+
+        # ---- Object storage via MinIO (consolidated: artifacts, uploads, LFS, packages, backups, etc) ----
+        gitlab_rails['object_store']['enabled'] = true
+        gitlab_rails['object_store']['connection'] = {
+          'provider' => 'AWS',
+          'region' => 'us-east-1',
+          'endpoint' => '${GITLAB_MINIO_ENDPOINT}',
+          'path_style' => true,
+          'aws_access_key_id' => '${MINIO_ACCESS_KEY}',
+          'aws_secret_access_key' => '${MINIO_SECRET_KEY}'
+        }
+        gitlab_rails['object_store']['objects']['artifacts']['bucket'] = 'gitlab-artifacts'
+        gitlab_rails['object_store']['objects']['uploads']['bucket'] = 'gitlab-uploads'
+        gitlab_rails['object_store']['objects']['lfs']['bucket'] = 'gitlab-lfs'
+        gitlab_rails['object_store']['objects']['packages']['bucket'] = 'gitlab-packages'
+        gitlab_rails['object_store']['objects']['dependency_proxy']['bucket'] = 'gitlab-dependency-proxy'
+        gitlab_rails['object_store']['objects']['terraform_state']['bucket'] = 'gitlab-terraform-state'
+        gitlab_rails['object_store']['objects']['pages']['bucket'] = 'gitlab-pages'
+        gitlab_rails['object_store']['objects']['external_diffs']['bucket'] = 'gitlab-external-diffs'
+
+        # ---- Backups: written locally then pushed to MinIO by the backup sidecar ----
+        gitlab_rails['backup_path'] = '/var/opt/gitlab/backups'
+        gitlab_rails['backup_keep_time'] = ${GITLAB_BACKUP_KEEP_SECONDS:-604800}
+
+        # ---- Container registry (optional, via MinIO) ----
+        # registry_external_url must never be called with an empty string
+        # (it errors even when registry['enable'] is false), so only touch
+        # any of this when actually enabled.
+        registry['enable'] = ${GITLAB_REGISTRY_ENABLE:-false}
+        if Gitlab['registry']['enable']
+          registry_external_url '${GITLAB_REGISTRY_EXTERNAL_URL}'
+          gitlab_rails['registry']['storage'] = {
+            's3' => {
+              'accesskey' => '${MINIO_ACCESS_KEY}',
+              'secretkey' => '${MINIO_SECRET_KEY}',
+              'bucket' => 'gitlab-registry',
+              'regionendpoint' => '${GITLAB_MINIO_ENDPOINT}',
+              'v4auth' => true,
+              'pathstyle' => true,
+              'region' => 'us-east-1'
+            }
+          }
+        end
+
+        # ---- Housekeeping ----
+        # external_url can be https:// while TLS is actually terminated by an
+        # upstream reverse proxy (NPM/Traefik/nginx). These two stop the
+        # embedded nginx from demanding a cert / redirecting to itself.
+        gitlab_rails['nginx']['listen_port'] = 80
+        gitlab_rails['nginx']['listen_https'] = false
+        letsencrypt['enable'] = false
+        gitlab_rails['gitlab_default_theme'] = 2
+    volumes:
+      - gitlab_config:/etc/gitlab
+      - gitlab_logs:/var/log/gitlab
+      - gitlab_data:/var/opt/gitlab
+      - gitlab_backups:/var/opt/gitlab/backups
+    ports:
+      - "${GITLAB_HTTP_PORT:-18300}:80"
+      - "${GITLAB_SSH_PORT:-2224}:22"
+    shm_size: "256m"
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/-/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 5m
+    networks:
+      - gitlab-shared
+      - proxy
+
+  runner:
+    image: gitlab/gitlab-runner:latest
+    container_name: gitlab_runner_1
+    depends_on:
+      - gitlab
+    env_file:
+      - .env
+    environment:
+      - CI_SERVER_URL=${GITLAB_EXTERNAL_URL}
+      - REGISTRATION_TOKEN=${GITLAB_RUNNER_REGISTRATION_TOKEN}
+      - RUNNER_NAME=${GITLAB_RUNNER_NAME:-mlcv-runner-1}
+      - RUNNER_EXECUTOR=docker
+      - DOCKER_IMAGE=${GITLAB_RUNNER_DEFAULT_IMAGE:-alpine:latest}
+      - REGISTER_NON_INTERACTIVE=true
+      - RUNNER_TAG_LIST=${GITLAB_RUNNER_TAGS:-mlcv,docker}
+    entrypoint: ["/bin/sh", "/scripts/register-and-run.sh"]
+    volumes:
+      - ./scripts/register-and-run.sh:/scripts/register-and-run.sh:ro
+      - gitlab_runner_config:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: always
+    networks:
+      - gitlab-shared
+      - proxy
+
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    container_name: gitlab_backup
+    depends_on:
+      - gitlab
+    env_file:
+      - .env
+    environment:
+      - GITLAB_APP_CONTAINER=gitlab_app
+      - MINIO_ENDPOINT=${GITLAB_MINIO_ENDPOINT}
+      - BACKUP_SCHEDULE_SECONDS=${GITLAB_BACKUP_SCHEDULE_SECONDS:-86400}
+    entrypoint: ["/bin/sh", "/scripts/backup-loop.sh"]
+    volumes:
+      - ./scripts/backup-loop.sh:/scripts/backup-loop.sh:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: always
+    networks:
+      - gitlab-shared
+
+volumes:
+  gitlab_config:
+  gitlab_logs:
+  gitlab_data:
+  gitlab_backups:
+  gitlab_runner_config:
+
+networks:
+  gitlab-shared:
+    external: true
+  proxy:
+    external: true

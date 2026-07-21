@@ -1,0 +1,10 @@
+FROM postgres:15-alpine
+
+RUN apk add --no-cache curl pgbackrest
+
+COPY backup-scripts /opt/gitea-backup-scripts
+
+RUN chmod +x /opt/gitea-backup-scripts/*.sh
+
+ENTRYPOINT ["/opt/gitea-backup-scripts/postgres-entrypoint-pgbackrest.sh"]
+CMD ["postgres"]

@@ -1,0 +1,118 @@
+services:
+  gitea:
+    image: commitgo/gitea-ee:24.6.0
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Match these IDs to the owner of the shared bind mounts.
+      - USER_UID=${GITEA_UID:-1000}
+      - USER_GID=${GITEA_GID:-1000}
+      - GITEA_CUSTOM=/data/gitea
+
+      # Server configuration
+      - GITEA__server__DOMAIN=${GITEA_DOMAIN}
+      - GITEA__server__ROOT_URL=${GITEA_ROOT_URL}
+      - GITEA__server__PROTOCOL=http
+      - GITEA__server__HTTP_PORT=3000
+      - GITEA__server__LOCAL_ROOT_URL=${GITEA_LOCAL_ROOT_URL:-http://gitea:3000/}
+      - GITEA__server__START_SSH_SERVER=false
+      - GITEA__server__SSH_DOMAIN=${GITEA_DOMAIN}
+      - GITEA__server__SSH_PORT=${GITEA_SSH_PORT:-222}
+      - GITEA__server__SSH_LISTEN_PORT=22
+      - GITEA__server__APP_DATA_PATH=/data/gitea/data
+      - GITEA__server__LANDING_PAGE=explore
+      - GITEA__server__LFS_START_SERVER=true
+      - GITEA__server__LFS_JWT_SECRET=${LFS_JWT_SECRET}
+
+      # Database configuration
+      - GITEA__database__DB_TYPE=postgres
+      - GITEA__database__HOST=${GITEA_DB_HOST}
+      - GITEA__database__NAME=${POSTGRES_DB}
+      - GITEA__database__USER=${POSTGRES_USER}
+      - GITEA__database__PASSWD=${POSTGRES_PASSWORD}
+      - GITEA__database__SSL_MODE=${GITEA_DB_SSL_MODE:-disable}
+
+      # Shared POSIX repository storage for HA
+      - GITEA__repository__ROOT=/data/git/repositories
+      - GITEA__repository__DEFAULT_REPO_UNITS=repo.code,repo.releases,repo.issues,repo.pulls,repo.wiki,repo.projects,repo.packages,repo.actions
+
+      # Bootstrap and HA-critical shared secrets
+      - GITEA__security__INSTALL_LOCK=true
+      - GITEA__security__SECRET_KEY=${GITEA_SECRET_KEY}
+      - GITEA__security__INTERNAL_TOKEN=${GITEA_INTERNAL_TOKEN}
+      - GITEA__oauth2__JWT_SECRET=${GITEA_OAUTH2_JWT_SECRET}
+      - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_REGISTRATION_TOKEN}
+
+      # Explicitly enable Actions and keep action logs in object storage for HA.
+      - GITEA__actions__ENABLED=true
+      - GITEA__actions__DEFAULT_ACTIONS_URL=github
+      - GITEA__actions__STORAGE_TYPE=minio
+      - GITEA__actions__MINIO_BASE_PATH=${GITEA_ACTIONS_LOG_MINIO_BASE_PATH:-actions_log/}
+
+      # Session, cache, queue, and distributed lock via Redis
+      - GITEA__session__PROVIDER=redis
+      - GITEA__session__PROVIDER_CONFIG=redis://:${REDIS_PASSWORD}@${GITEA_REDIS_HOST}/0?pool_size=100&idle_timeout=120s
+      - GITEA__cache__ADAPTER=redis
+      - GITEA__cache__HOST=redis://:${REDIS_PASSWORD}@${GITEA_REDIS_HOST}/1
+      - GITEA__queue__TYPE=redis
+      - GITEA__queue__CONN_STR=redis://:${REDIS_PASSWORD}@${GITEA_REDIS_HOST}/2
+      - GITEA__global_lock__SERVICE_TYPE=redis
+      - GITEA__global_lock__SERVICE_CONN_STR=redis://:${REDIS_PASSWORD}@${GITEA_REDIS_HOST}/5
+
+      # Shared object storage for non-git data
+      - GITEA__storage__STORAGE_TYPE=minio
+      - GITEA__storage__MINIO_ENDPOINT=${GITEA_MINIO_ENDPOINT}
+      - GITEA__storage__MINIO_ACCESS_KEY_ID=${MINIO_ACCESS_KEY}
+      - GITEA__storage__MINIO_SECRET_ACCESS_KEY=${MINIO_SECRET_KEY}
+      - GITEA__storage__MINIO_BUCKET=${GITEA_MINIO_BUCKET:-gitea-ee-data}
+      - GITEA__storage__MINIO_USE_SSL=${GITEA_MINIO_USE_SSL:-false}
+      - GITEA__storage__MINIO_BUCKET_LOOKUP_TYPE=${GITEA_MINIO_BUCKET_LOOKUP_TYPE:-path}
+
+      # Explicitly enable the package registry used by the OCI container registry.
+      - GITEA__packages__ENABLED=true
+      - GITEA__packages__CHUNKED_UPLOAD_PATH=/data/gitea/tmp/package-upload
+      - GITEA__packages__LIMIT_SIZE_CONTAINER=${GITEA_CONTAINER_REGISTRY_LIMIT_SIZE:--1}
+
+      # Avoid local Bleve state on each node unless an external search backend is configured.
+      - GITEA__indexer__ISSUE_INDEXER_TYPE=db
+      - GITEA__indexer__REPO_INDEXER_ENABLED=false
+
+      # Keep logs node-local and ship them via container stdout/stderr.
+      - GITEA__log__MODE=console
+
+    ports:
+      - "${GITEA_HTTP_PORT:-3001}:3000"
+      - "${GITEA_SSH_PORT:-222}:22"
+
+    volumes:
+      - ${GITEA_SHARED_CONF_PATH}:/data/gitea/conf
+      - ${GITEA_SHARED_REPO_PATH}:/data/git/repositories
+      - ${GITEA_NODE_DATA_PATH}:/data/gitea/data
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/v1/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  runner:
+    image: gitea/act_runner:0.3.0
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      gitea:
+        condition: service_healthy
+    working_dir: /data
+    environment:
+      - GITEA_INSTANCE_URL=${GITEA_RUNNER_INSTANCE_URL:-http://gitea:3000/}
+      - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_REGISTRATION_TOKEN}
+      - GITEA_RUNNER_NAME=${GITEA_RUNNER_NAME}
+      - GITEA_RUNNER_LABELS=${GITEA_RUNNER_LABELS}
+      - CONFIG_FILE=/config.yaml
+    volumes:
+      - ${GITEA_RUNNER_DATA_PATH}:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./act_runner.yaml:/config.yaml:ro
