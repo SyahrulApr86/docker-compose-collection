@@ -41,6 +41,7 @@ services:
       - GITEA__security__INSTALL_LOCK=true
       - GITEA__security__SECRET_KEY=${GITEA_SECRET_KEY}
       - GITEA__security__INTERNAL_TOKEN=${GITEA_INTERNAL_TOKEN}
+      - GITEA__security__LOGIN_REMEMBER_DAYS=${GITEA_LOGIN_REMEMBER_DAYS:-30}
       - GITEA__oauth2__JWT_SECRET=${GITEA_OAUTH2_JWT_SECRET}
       - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_REGISTRATION_TOKEN}
 
@@ -53,6 +54,7 @@ services:
       # Session, cache, queue, and distributed lock via Redis
       - GITEA__session__PROVIDER=redis
       - GITEA__session__PROVIDER_CONFIG=redis://:${REDIS_PASSWORD}@${GITEA_REDIS_HOST}/0?pool_size=100&idle_timeout=120s
+      - GITEA__session__SESSION_LIFE_TIME=${GITEA_SESSION_LIFE_TIME:-2592000}
       - GITEA__cache__ADAPTER=redis
       - GITEA__cache__HOST=redis://:${REDIS_PASSWORD}@${GITEA_REDIS_HOST}/1
       - GITEA__queue__TYPE=redis
